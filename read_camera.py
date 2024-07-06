@@ -2,13 +2,8 @@ import cv2
 import numpy as np
 import time
 import threading
-from singleton_lock import SingletonLock
-
-print_lock = SingletonLock.get_lock('print')
-
-def tprint(*args, **kwargs):
-    with print_lock:
-        print(*args, **kwargs)
+import queue
+from singleton_lock import print_lock, tprint
 
 def decode_frame_size_rate(setting_str):
     if setting_str == "640x480@30":
@@ -25,9 +20,9 @@ def decode_frame_size_rate(setting_str):
         fps = 30
     return frameWidth, frameHeight, fps
 
-def open_single_camera(camID, config):
+def open_single_camera(cam_id, config):
     frameWidth, frameHeight, fps = decode_frame_size_rate(config['resolution_fps_setting'])
-    cap = cv2.VideoCapture(camID, config['api'])
+    cap = cv2.VideoCapture(cam_id, config['api'])
     cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
     cap.set(cv2.CAP_PROP_FRAME_WIDTH,  frameWidth)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, frameHeight)
@@ -69,17 +64,17 @@ def open_single_camera(camID, config):
     cap.release()
     cv2.destroyAllWindows()
 
-def syn_open_multiple_cameras(camIDs, config):
+def syn_open_multiple_cameras(cam_ids, config):
     frameWidth, frameHeight, fps = decode_frame_size_rate(config['resolution_fps_setting'])
     # 打開相機
-    cap0 = cv2.VideoCapture(camIDs[0], config['api'])
+    cap0 = cv2.VideoCapture(cam_ids[0], config['api'])
     cap0.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
     cap0.set(cv2.CAP_PROP_FRAME_WIDTH,  frameWidth)
     cap0.set(cv2.CAP_PROP_FRAME_HEIGHT, frameHeight)
     cap0.set(cv2.CAP_PROP_FPS, fps)
     cap0.set(cv2.CAP_PROP_EXPOSURE, config['exposure'])
     cap0.set(cv2.CAP_PROP_GAIN, config['gain'])
-    cap1 = cv2.VideoCapture(camIDs[1], config['api'])
+    cap1 = cv2.VideoCapture(cam_ids[1], config['api'])
     cap1.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
     cap1.set(cv2.CAP_PROP_FRAME_WIDTH,  frameWidth)
     cap1.set(cv2.CAP_PROP_FRAME_HEIGHT, frameHeight)
@@ -133,9 +128,9 @@ def syn_open_multiple_cameras(camIDs, config):
     cap1.release()
     cv2.destroyAllWindows()
 
-def print_cam_informations(camID, cam, type="simple"):
+def print_cam_informations(cam_id, cam, type="simple"):
     with print_lock:
-        print("=============" + "camera " + str(camID) + "=============")
+        print("=============" + "camera " + str(cam_id) + "=============")
         print("FPS :", cam.get(cv2.CAP_PROP_FPS))
         print("Frame size :", cam.get(cv2.CAP_PROP_FRAME_WIDTH), cam.get(cv2.CAP_PROP_FRAME_HEIGHT))
         
@@ -154,26 +149,27 @@ def print_cam_informations(camID, cam, type="simple"):
             print("zoom :", cam.get(cv2.CAP_PROP_ZOOM))
 
 class CameraReader(threading.Thread):
-    def __init__(self, camID, config, frame_queue):
+    def __init__(self, cam_id, config):
         threading.Thread.__init__(self)
-        self.camID = camID
+        self.cam_id = cam_id
         self.config = config
-        self.frame_queue = frame_queue
+        self.queue = queue.Queue(maxsize = 10)
+        self.fps = 0
         self.running = True
 
     def run(self):
-        tprint(f"Start camera {self.camID}")
+        tprint(f"Start camera {self.cam_id}")
         try:
             self.read_camera()
         except Exception as e:
-            tprint(f"Exception in camera {self.camID}: {e}")
+            tprint(f"Exception in camera {self.cam_id}: {e}")
         finally:
-            tprint(f"Stopping camera {self.camID}")
+            tprint(f"Stopping camera {self.cam_id}")
 
     def read_camera(self):
         frameWidth, frameHeight, fps = decode_frame_size_rate(self.config['resolution_fps_setting'])
 
-        cam = cv2.VideoCapture(self.camID, self.config['api'])
+        cam = cv2.VideoCapture(self.cam_id, self.config['api'])
         cam.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
         cam.set(cv2.CAP_PROP_FRAME_WIDTH,  frameWidth)
         cam.set(cv2.CAP_PROP_FRAME_HEIGHT, frameHeight)
@@ -185,35 +181,45 @@ class CameraReader(threading.Thread):
             rval, frame = cam.read()
         else:
             rval = False
-        print_cam_informations(self.camID, cam)
+        print_cam_informations(self.cam_id, cam)
 
+        prev_time = time.time()
+        times = [1]
+        maxCount = 60
         while rval and self.running:
+            current_time = time.time()
+            times.append(round(current_time - prev_time, 2))
+            times = times[-maxCount:]
+            self.fps = 1 / np.mean(times) #計算時間
+            prev_time = current_time
+
             rval, frame = cam.read()
-            if not self.frame_queue.full():
-                self.frame_queue.put(frame)
+            if not self.queue.full():
+                self.queue.put(frame)
             # else:
-            #     tprint(f"queue {self.camID} full!")
+            #     tprint(f"queue {self.cam_id} full!")
         self.running = False
         cam.release()
-        tprint(f"Released camera {self.camID}")
+        tprint(f"Released camera {self.cam_id}")
 
 class CameraDisplayer(threading.Thread):
-    def __init__(self, camID, config, frame_queue):
+    def __init__(self, cam_id, config, frame_queue):
         threading.Thread.__init__(self)
-        self.camID = camID
-        self.screen_name = f"camera {camID}"
+        self.cam_id = cam_id
+        self.screen_name = f"camera {cam_id}"
         self.config = config
         self.frame_queue = frame_queue
+        self.fps = 0
         self.running = True
 
     def run(self):
-        tprint("Displaying camera" + str(self.camID))
+        tprint("Displaying camera" + str(self.cam_id))
         try:
             self.display_camera()
         except Exception as e:
-            tprint(f"Exception in camera {self.camID}: {e}")
+            tprint(f"Exception in camera {self.cam_id}: {e}")
         finally:
-            tprint(f"Stopping camera {self.camID}")
+            tprint(f"Stopping camera {self.cam_id}")
             cv2.destroyWindow(self.screen_name)
     
     def display_camera(self):
@@ -221,39 +227,45 @@ class CameraDisplayer(threading.Thread):
         cv2.namedWindow(self.screen_name)
 
         prev_time = time.time()
-        
         times = [1]
         maxCount = 60
-        while self.running:
+        while self.running and self.frame_queue:
             if not self.frame_queue.empty():
                 current_time = time.time()
                 times.append(round(current_time - prev_time, 2))
                 times = times[-maxCount:]
-                optime = np.mean(times) #計算時間
+                self.fps = 1 / np.mean(times) #計算時間
                 prev_time = current_time
+
                 frame = self.frame_queue.get()
-                cv2.putText(frame,'FPS : {0:.2f}'.format(round(1/optime,2)), (10, 30),cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-                cv2.putText(frame,'Time : {0:.2f}'.format(round(optime, 5)), (10, 60),cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                cv2.putText(
+                    frame, 'FPS : {0:.2f}'.format(round(self.fps, 2)), 
+                    (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                cv2.putText(
+                    frame, 'Time : {0:.2f}'.format(round(1 / self.fps, 5)), 
+                    (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
                 cv2.imshow(self.screen_name, frame)
                 # 按下 'q' 鍵退出
                 if cv2.waitKey(1) == ord('q'):
                     self.running = False
                     break
-            # else:
-            #     tprint(f"queue {self.camID} empty!")
+            else:
+                # tprint(f"queue {self.cam_id} empty!")
+                time.sleep(0.005)
 
 
-def asyn_open_cameras(camIDs, frame_queues, config):
-    threads = []
-    for camID in camIDs:
-        reader = CameraReader(camID, config, frame_queues[camID])
-        threads.append(reader)
-        CameraReader(camID, config, frame_queues[camID]).start()
-    for camID in camIDs:
-        displayer = CameraDisplayer(camID, config, frame_queues[camID])
-        threads.append(displayer)
+def asyn_open_cameras(cam_ids, config):
+    camera_threads = {}
+    display_threads = {}
+    for cam_id in cam_ids:
+        reader = CameraReader(cam_id, config)
+        reader.start()
+        camera_threads[cam_id] = reader
+    for cam_id in cam_ids:
+        displayer = CameraDisplayer(cam_id, config, camera_threads[cam_id].queue)
         displayer.start()
-    return threads
+        display_threads[cam_id] = displayer
+    return camera_threads, display_threads
 
 def stop_all_threads(threads):
     for t in threads:

@@ -5,6 +5,8 @@ import queue
 import threading
 from singleton_lock import SingletonLock
 from read_camera import asyn_open_cameras, stop_all_threads
+import tkinter as tk
+from panel import CameraControlPanel
 
 print_lock = SingletonLock.get_lock('print')
 
@@ -39,7 +41,7 @@ def load_openpose_module():
         print(e)
         exit(-1)
 
-if __name__ == '__main__':
+def main():
     print('\n==============Start program==============')
     config = {
         # 'resolution_fps_setting': "640x480@30",
@@ -50,11 +52,17 @@ if __name__ == '__main__':
         'gain': 200,
     }
 
-    load_openpose_module()
-    camIDs = [0, 1]
-    frame_queues = {}
-    for camID in camIDs:
-        frame_queues[camID] = queue.Queue(maxsize=10)
-    threads = asyn_open_cameras([0, 1], frame_queues, config)
-    print("Finish initialize threads")
-    # stop_all_threads(threads)
+    root = tk.Tk()
+    root.title("Main Application")
+    app = CameraControlPanel(
+        master = root, 
+        config = config, 
+        camera_ids = [0, 1]
+    )
+    app.pack()
+    root.mainloop()
+
+    # load_openpose_module()
+
+if __name__ == "__main__":
+    main()
