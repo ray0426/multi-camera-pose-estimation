@@ -1,9 +1,10 @@
 import sys
 import os
 import cv2
+import queue
 import threading
 from singleton_lock import SingletonLock
-from read_camera import asyn_open_cameras
+from read_camera import asyn_open_cameras, stop_all_threads
 
 print_lock = SingletonLock.get_lock('print')
 
@@ -50,7 +51,10 @@ if __name__ == '__main__':
     }
 
     load_openpose_module()
-    # open_single_camera(0, config)
-    # syn_open_multiple_cameras([0, 1], config)
-    asyn_open_cameras([0, 1], config)
-    
+    camIDs = [0, 1]
+    frame_queues = {}
+    for camID in camIDs:
+        frame_queues[camID] = queue.Queue(maxsize=10)
+    threads = asyn_open_cameras([0, 1], frame_queues, config)
+    print("Finish initialize threads")
+    # stop_all_threads(threads)
