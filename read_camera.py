@@ -2,23 +2,10 @@ import cv2
 import numpy as np
 import time
 import threading
+from multiprocessing import Process, Queue
 import queue
 from singleton_lock import print_lock, tprint
-
-def decode_frame_size_rate(setting_str):
-    if setting_str == "640x480@30":
-        frameWidth  = 640
-        frameHeight = 480
-        fps = 30
-    elif setting_str == "1280x720@60":
-        frameWidth  = 1280
-        frameHeight = 720
-        fps = 60
-    elif setting_str == "1920x1080@30":
-        frameWidth  = 1920
-        frameHeight = 1080
-        fps = 30
-    return frameWidth, frameHeight, fps
+from utils import decode_frame_size_rate
 
 def open_single_camera(cam_id, config):
     frameWidth, frameHeight, fps = decode_frame_size_rate(config['resolution_fps_setting'])
@@ -148,12 +135,15 @@ def print_cam_informations(cam_id, cam, type="simple"):
             print("mode :", cam.get(cv2.CAP_PROP_MODE))
             print("zoom :", cam.get(cv2.CAP_PROP_ZOOM))
 
-class CameraReader(threading.Thread):
+class CameraReader(Process):
+# class CameraReader(threading.Thread):
     def __init__(self, cam_id, config):
-        threading.Thread.__init__(self)
+        super().__init__()
+        # threading.Thread.__init__(self)
         self.cam_id = cam_id
         self.config = config
-        self.queue = queue.Queue(maxsize = 10)
+        self.queue = Queue(maxsize = 5)
+        # self.queue = queue.Queue(maxsize = 5)
         self.fps = 0
         self.running = True
 
@@ -194,17 +184,21 @@ class CameraReader(threading.Thread):
             prev_time = current_time
 
             rval, frame = cam.read()
-            if not self.queue.full():
-                self.queue.put(frame)
+            if self.queue.full():
+                self.queue.get()
+            self.queue.put(frame)
+            tprint(f"fps: {round(self.fps)}")
             # else:
             #     tprint(f"queue {self.cam_id} full!")
         self.running = False
         cam.release()
         tprint(f"Released camera {self.cam_id}")
 
-class CameraDisplayer(threading.Thread):
+class CameraDisplayer(Process):
+# class CameraDisplayer(threading.Thread):
     def __init__(self, cam_id, config, frame_queue):
-        threading.Thread.__init__(self)
+        super().__init__()
+        # threading.Thread.__init__(self)
         self.cam_id = cam_id
         self.screen_name = f"camera {cam_id}"
         self.config = config
