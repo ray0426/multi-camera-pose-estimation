@@ -49,16 +49,22 @@ def load_openpose_module():
 
 class PoseEstimator(Process):
 # class PoseEstimator(threading.Thread):
-    def __init__(self, cam_id, config, frame_queue):
+    def __init__(self, cam_id, config, frame_queue, shared_dict):
         super().__init__()
         # threading.Thread.__init__(self)
         self.cam_id = cam_id
+        self.process_name = f"PoseEstimator {self.cam_id}"
         self.config = config
         self.frame_queue = frame_queue
         self.queue = Queue(maxsize = 5)
         # self.queue = queue.Queue(maxsize = 5)
-        self.fps = 0
-        self.running = True
+        self.shared_dict = shared_dict
+        self.shared_dict[self.process_name] = {
+            'fps': 0,
+            'running': True
+        }
+        # self.fps = 0
+        # self.running = True
 
     def run(self):
         if not OPENPOSE_VALID:
@@ -75,6 +81,10 @@ class PoseEstimator(Process):
         except Exception as e:
             tprint(f"Exception in HPE {self.cam_id}: {e}")
         finally:
+            # queue cancel_join_thread() to prevent block join_thread()
+            # https://docs.python.org/3/library/multiprocessing.html#pipes-and-queues
+            self.queue.close()
+            self.queue.cancel_join_thread()
             tprint(f"Stopping HPE {self.cam_id}")
     
     def pose_estimation(self):
@@ -101,12 +111,14 @@ class PoseEstimator(Process):
         prev_time = time.time()
         times = [1]
         maxCount = 60
-        while self.running and self.frame_queue:
+        while self.shared_dict[self.process_name]['running'] and self.frame_queue:
             if not self.frame_queue.empty():
                 current_time = time.time()
                 times.append(round(current_time - prev_time, 2))
                 times = times[-maxCount:]
-                self.fps = 1 / np.mean(times) #計算時間
+                status = self.shared_dict[self.process_name]
+                status['fps'] = 1 / np.mean(times) #計算時間
+                self.shared_dict[self.process_name] = status
                 prev_time = current_time
 
                 frame = self.frame_queue.get()
@@ -123,3 +135,7 @@ class PoseEstimator(Process):
                 # tprint(f"queue {self.cam_id} empty!")
                 time.sleep(0.01)
             # tprint(f"                      queue size: {self.queue.qsize()}")
+        print("finish hpe")
+
+        opWrapper.stop()
+        print("openpose closed")

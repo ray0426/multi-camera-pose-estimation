@@ -137,15 +137,21 @@ def print_cam_informations(cam_id, cam, type="simple"):
 
 class CameraReader(Process):
 # class CameraReader(threading.Thread):
-    def __init__(self, cam_id, config):
+    def __init__(self, cam_id, config, shared_dict):
         super().__init__()
         # threading.Thread.__init__(self)
         self.cam_id = cam_id
+        self.process_name = f"CameraReader {self.cam_id}"
         self.config = config
         self.queue = Queue(maxsize = 5)
         # self.queue = queue.Queue(maxsize = 5)
-        self.fps = 0
-        self.running = True
+        self.shared_dict = shared_dict
+        self.shared_dict[self.process_name] = {
+            'fps': 0,
+            'running': True
+        }
+        # self.fps = 0
+        # self.running = True
 
     def run(self):
         tprint(f"Start camera {self.cam_id}")
@@ -154,6 +160,10 @@ class CameraReader(Process):
         except Exception as e:
             tprint(f"Exception in camera {self.cam_id}: {e}")
         finally:
+            # queue cancel_join_thread() to prevent block join_thread()
+            # https://docs.python.org/3/library/multiprocessing.html#pipes-and-queues
+            self.queue.close()
+            self.queue.cancel_join_thread()
             tprint(f"Stopping camera {self.cam_id}")
 
     def read_camera(self):
@@ -176,35 +186,46 @@ class CameraReader(Process):
         prev_time = time.time()
         times = [1]
         maxCount = 60
-        while rval and self.running:
+        while rval and self.shared_dict[self.process_name]['running']:
             current_time = time.time()
             times.append(round(current_time - prev_time, 2))
             times = times[-maxCount:]
-            self.fps = 1 / np.mean(times) #計算時間
+            status = self.shared_dict[self.process_name]
+            status['fps'] = 1 / np.mean(times) #計算時間
+            self.shared_dict[self.process_name] = status
             prev_time = current_time
 
             rval, frame = cam.read()
             if self.queue.full():
                 self.queue.get()
             self.queue.put(frame)
-            tprint(f"fps: {round(self.fps)}")
+            # tprint(f"fps: {round(self.shared_dict[self.process_name]['fps'])}")
             # else:
             #     tprint(f"queue {self.cam_id} full!")
-        self.running = False
+        status = self.shared_dict[self.process_name]
+        status['running'] = False
+        self.shared_dict[self.process_name] = status
         cam.release()
         tprint(f"Released camera {self.cam_id}")
 
 class CameraDisplayer(Process):
 # class CameraDisplayer(threading.Thread):
-    def __init__(self, cam_id, config, frame_queue):
+    def __init__(self, cam_id, config, frame_queue, shared_dict):
         super().__init__()
         # threading.Thread.__init__(self)
         self.cam_id = cam_id
+        self.process_name = f"CameraDisplayer {self.cam_id}"
         self.screen_name = f"camera {cam_id}"
         self.config = config
         self.frame_queue = frame_queue
-        self.fps = 0
-        self.running = True
+
+        self.shared_dict = shared_dict
+        self.shared_dict[self.process_name] = {
+            'fps': 0,
+            'running': True
+        }
+        # self.fps = 0
+        # self.running = True
 
     def run(self):
         tprint("Displaying camera" + str(self.cam_id))
@@ -223,25 +244,29 @@ class CameraDisplayer(Process):
         prev_time = time.time()
         times = [1]
         maxCount = 60
-        while self.running and self.frame_queue:
+        while self.shared_dict[self.process_name]['running'] and self.frame_queue:
             if not self.frame_queue.empty():
                 current_time = time.time()
                 times.append(round(current_time - prev_time, 2))
                 times = times[-maxCount:]
-                self.fps = 1 / np.mean(times) #計算時間
+                status = self.shared_dict[self.process_name]
+                status['fps'] = 1 / np.mean(times) #計算時間
+                self.shared_dict[self.process_name] = status
                 prev_time = current_time
 
                 frame = self.frame_queue.get()
                 cv2.putText(
-                    frame, 'FPS : {0:.2f}'.format(round(self.fps, 2)), 
+                    frame, 'FPS : {0:.2f}'.format(round(self.shared_dict[self.process_name]['fps'], 2)), 
                     (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
                 cv2.putText(
-                    frame, 'Time : {0:.2f}'.format(round(1 / self.fps, 5)), 
+                    frame, 'Time : {0:.2f}'.format(round(1 / self.shared_dict[self.process_name]['fps'], 5)), 
                     (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
                 cv2.imshow(self.screen_name, frame)
                 # 按下 'q' 鍵退出
                 if cv2.waitKey(1) == ord('q'):
-                    self.running = False
+                    status = self.shared_dict[self.process_name]
+                    status['running'] = False
+                    self.shared_dict[self.process_name] = status
                     break
             else:
                 # tprint(f"queue {self.cam_id} empty!")

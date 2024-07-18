@@ -1,5 +1,6 @@
 import time
 import tkinter as tk
+from multiprocessing import Manager
 from read_camera import CameraReader, CameraDisplayer
 from pose_estimation_2d import PoseEstimator
 
@@ -19,6 +20,9 @@ class CameraControlPanel(tk.Frame):
         self.read_fps_labels = {}
         self.display_fps_labels = {}
         self.hpe_fps_labels = {}
+
+        self.process_manager = Manager()
+        self.shared_dict = self.process_manager.dict()
 
         self.create_widgets()
         self.update_fps()
@@ -118,14 +122,16 @@ class CameraControlPanel(tk.Frame):
         
     def start_camera(self, cam_id):
         if cam_id not in self.camera_threads.keys():
-            reader = CameraReader(cam_id, self.config)
+            reader = CameraReader(cam_id, self.config, self.shared_dict)
             reader.start()
             self.camera_threads[cam_id] = reader
             tprint(f"Camera {cam_id} started!")
 
     def stop_camera(self, cam_id):
         if cam_id in self.camera_threads.keys():
-            self.camera_threads[cam_id].running = False
+            status = self.shared_dict[f"CameraReader {cam_id}"]
+            status['running'] = False
+            self.shared_dict[f"CameraReader {cam_id}"] = status
             self.camera_threads[cam_id].join()
             del self.camera_threads[cam_id]
             tprint(f"Camera {cam_id} stopped!")
@@ -136,7 +142,8 @@ class CameraControlPanel(tk.Frame):
             displayer = CameraDisplayer(
                 cam_id, self.config, 
                 # self.camera_threads[cam_id].queue
-                self.hpe_threads[cam_id].queue
+                self.hpe_threads[cam_id].queue,
+                self.shared_dict
             )
             displayer.start()
             self.display_threads[cam_id] = displayer
@@ -144,7 +151,9 @@ class CameraControlPanel(tk.Frame):
 
     def stop_display(self, cam_id):
         if cam_id in self.display_threads.keys():
-            self.display_threads[cam_id].running = False
+            status = self.shared_dict[f"CameraDisplayer {cam_id}"]
+            status['running'] = False
+            self.shared_dict[f"CameraDisplayer {cam_id}"] = status
             self.display_threads[cam_id].join()
             del self.display_threads[cam_id]
             tprint(f"Display {cam_id} stopped!")
@@ -154,7 +163,8 @@ class CameraControlPanel(tk.Frame):
             cam_id not in self.hpe_threads.keys():
             estimator = PoseEstimator(
                 cam_id, self.config,
-                self.camera_threads[cam_id].queue
+                self.camera_threads[cam_id].queue,
+                self.shared_dict
             )
             estimator.start()
             self.hpe_threads[cam_id] = estimator
@@ -162,7 +172,9 @@ class CameraControlPanel(tk.Frame):
 
     def stop_hpe(self, cam_id):
         if cam_id in self.hpe_threads.keys():
-            self.hpe_threads[cam_id].running = False
+            status = self.shared_dict[f"PoseEstimator {cam_id}"]
+            status['running'] = False
+            self.shared_dict[f"PoseEstimator {cam_id}"] = status
             self.hpe_threads[cam_id].join()
             del self.hpe_threads[cam_id]
             tprint(f"HPE {cam_id} stopped!")
@@ -170,8 +182,9 @@ class CameraControlPanel(tk.Frame):
     def update_fps(self):
         for cam_id in self.camera_ids:
             if cam_id in self.camera_threads.keys():
+                status = self.shared_dict[f"CameraReader {cam_id}"]
                 self.read_fps_labels[cam_id].config(
-                    text = f"Read FPS: {self.camera_threads[cam_id].fps:.2f}"
+                    text = f"Read FPS: {status['fps']:.2f}"
                 )
             else:
                 self.read_fps_labels[cam_id].config(
@@ -179,8 +192,9 @@ class CameraControlPanel(tk.Frame):
                 )
         for cam_id in self.camera_ids:
             if cam_id in self.display_threads.keys():
+                status = self.shared_dict[f"CameraDisplayer {cam_id}"]
                 self.display_fps_labels[cam_id].config(
-                    text = f" Display FPS: {self.display_threads[cam_id].fps:.2f}"
+                    text = f" Display FPS: {status['fps']:.2f}"
                 )
             else:
                 self.display_fps_labels[cam_id].config(
@@ -188,8 +202,9 @@ class CameraControlPanel(tk.Frame):
                 )
         for cam_id in self.camera_ids:
             if cam_id in self.hpe_threads.keys():
+                status = self.shared_dict[f"PoseEstimator {cam_id}"]
                 self.hpe_fps_labels[cam_id].config(
-                    text = f" HPE FPS: {self.hpe_threads[cam_id].fps:.2f}"
+                    text = f" HPE FPS: {status['fps']:.2f}"
                 )
             else:
                 self.hpe_fps_labels[cam_id].config(
