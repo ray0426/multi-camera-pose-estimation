@@ -13,9 +13,9 @@ class CameraControlPanel(tk.Frame):
         self.config = config
         self.camera_ids = camera_ids
 
-        self.camera_threads = {}
-        self.display_threads = {}
-        self.hpe_threads = {}
+        self.camera_procs = {}
+        self.display_procs = {}
+        self.hpe_procs = {}
 
         self.read_fps_labels = {}
         self.display_fps_labels = {}
@@ -121,67 +121,67 @@ class CameraControlPanel(tk.Frame):
             stop_hpe_button.pack(side = "left")
         
     def start_camera(self, cam_id):
-        if cam_id not in self.camera_threads.keys():
+        if cam_id not in self.camera_procs.keys():
             reader = CameraReader(cam_id, self.config, self.shared_dict)
             reader.start()
-            self.camera_threads[cam_id] = reader
+            self.camera_procs[cam_id] = reader
             tprint(f"Camera {cam_id} started!")
 
     def stop_camera(self, cam_id):
-        if cam_id in self.camera_threads.keys():
+        if cam_id in self.camera_procs.keys():
             status = self.shared_dict[f"CameraReader {cam_id}"]
             status['running'] = False
             self.shared_dict[f"CameraReader {cam_id}"] = status
-            self.camera_threads[cam_id].join()
-            del self.camera_threads[cam_id]
+            self.camera_procs[cam_id].join()
+            del self.camera_procs[cam_id]
             tprint(f"Camera {cam_id} stopped!")
     
     def start_display(self, cam_id):
-        if cam_id in self.camera_threads.keys() and \
-            cam_id not in self.display_threads.keys():
+        if cam_id in self.camera_procs.keys() and \
+            cam_id not in self.display_procs.keys():
             displayer = CameraDisplayer(
                 cam_id, self.config, 
-                # self.camera_threads[cam_id].queue
-                self.hpe_threads[cam_id].queue,
+                # self.camera_procs[cam_id].queue
+                self.hpe_procs[cam_id].queue,
                 self.shared_dict
             )
             displayer.start()
-            self.display_threads[cam_id] = displayer
+            self.display_procs[cam_id] = displayer
             tprint(f"Display {cam_id} started!")
 
     def stop_display(self, cam_id):
-        if cam_id in self.display_threads.keys():
+        if cam_id in self.display_procs.keys():
             status = self.shared_dict[f"CameraDisplayer {cam_id}"]
             status['running'] = False
             self.shared_dict[f"CameraDisplayer {cam_id}"] = status
-            self.display_threads[cam_id].join()
-            del self.display_threads[cam_id]
+            self.display_procs[cam_id].join()
+            del self.display_procs[cam_id]
             tprint(f"Display {cam_id} stopped!")
     
     def start_hpe(self, cam_id):
-        if cam_id in self.camera_threads.keys() and \
-            cam_id not in self.hpe_threads.keys():
+        if cam_id in self.camera_procs.keys() and \
+            cam_id not in self.hpe_procs.keys():
             estimator = PoseEstimator(
                 cam_id, self.config,
-                self.camera_threads[cam_id].queue,
+                self.camera_procs[cam_id].queue,
                 self.shared_dict
             )
             estimator.start()
-            self.hpe_threads[cam_id] = estimator
+            self.hpe_procs[cam_id] = estimator
             tprint(f"HPE {cam_id} started!")
 
     def stop_hpe(self, cam_id):
-        if cam_id in self.hpe_threads.keys():
+        if cam_id in self.hpe_procs.keys():
             status = self.shared_dict[f"PoseEstimator {cam_id}"]
             status['running'] = False
             self.shared_dict[f"PoseEstimator {cam_id}"] = status
-            self.hpe_threads[cam_id].join()
-            del self.hpe_threads[cam_id]
+            self.hpe_procs[cam_id].join()
+            del self.hpe_procs[cam_id]
             tprint(f"HPE {cam_id} stopped!")
 
     def update_fps(self):
         for cam_id in self.camera_ids:
-            if cam_id in self.camera_threads.keys():
+            if cam_id in self.camera_procs.keys():
                 status = self.shared_dict[f"CameraReader {cam_id}"]
                 self.read_fps_labels[cam_id].config(
                     text = f"Read FPS: {status['fps']:.2f}"
@@ -191,7 +191,7 @@ class CameraControlPanel(tk.Frame):
                     text = f"Read FPS: invalid"
                 )
         for cam_id in self.camera_ids:
-            if cam_id in self.display_threads.keys():
+            if cam_id in self.display_procs.keys():
                 status = self.shared_dict[f"CameraDisplayer {cam_id}"]
                 self.display_fps_labels[cam_id].config(
                     text = f" Display FPS: {status['fps']:.2f}"
@@ -201,7 +201,7 @@ class CameraControlPanel(tk.Frame):
                     text = f" Display FPS: invalid"
                 )
         for cam_id in self.camera_ids:
-            if cam_id in self.hpe_threads.keys():
+            if cam_id in self.hpe_procs.keys():
                 status = self.shared_dict[f"PoseEstimator {cam_id}"]
                 self.hpe_fps_labels[cam_id].config(
                     text = f" HPE FPS: {status['fps']:.2f}"
@@ -213,12 +213,12 @@ class CameraControlPanel(tk.Frame):
         self.after(1000, self.update_fps)
 
     def on_closing(self):
-        # Close every thread before closing the panel
-        for cam_id in list(self.camera_threads.keys()):
+        # Close every proc before closing the panel
+        for cam_id in list(self.camera_procs.keys()):
             self.stop_camera(cam_id)
-        for cam_id in list(self.display_threads.keys()):
+        for cam_id in list(self.display_procs.keys()):
             self.stop_display(cam_id)
-        for cam_id in list(self.hpe_threads.keys()):
+        for cam_id in list(self.hpe_procs.keys()):
             self.stop_hpe(cam_id)
         time.sleep(1)
         self.master.destroy()

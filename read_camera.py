@@ -1,9 +1,7 @@
 import cv2
 import numpy as np
 import time
-import threading
 from multiprocessing import Process, Queue
-import queue
 from singleton_lock import print_lock, tprint
 from utils import decode_frame_size_rate
 
@@ -136,22 +134,17 @@ def print_cam_informations(cam_id, cam, type="simple"):
             print("zoom :", cam.get(cv2.CAP_PROP_ZOOM))
 
 class CameraReader(Process):
-# class CameraReader(threading.Thread):
     def __init__(self, cam_id, config, shared_dict):
         super().__init__()
-        # threading.Thread.__init__(self)
         self.cam_id = cam_id
         self.process_name = f"CameraReader {self.cam_id}"
         self.config = config
         self.queue = Queue(maxsize = 5)
-        # self.queue = queue.Queue(maxsize = 5)
         self.shared_dict = shared_dict
         self.shared_dict[self.process_name] = {
             'fps': 0,
             'running': True
         }
-        # self.fps = 0
-        # self.running = True
 
     def run(self):
         tprint(f"Start camera {self.cam_id}")
@@ -209,10 +202,8 @@ class CameraReader(Process):
         tprint(f"Released camera {self.cam_id}")
 
 class CameraDisplayer(Process):
-# class CameraDisplayer(threading.Thread):
     def __init__(self, cam_id, config, frame_queue, shared_dict):
         super().__init__()
-        # threading.Thread.__init__(self)
         self.cam_id = cam_id
         self.process_name = f"CameraDisplayer {self.cam_id}"
         self.screen_name = f"camera {cam_id}"
@@ -224,8 +215,6 @@ class CameraDisplayer(Process):
             'fps': 0,
             'running': True
         }
-        # self.fps = 0
-        # self.running = True
 
     def run(self):
         tprint("Displaying camera" + str(self.cam_id))

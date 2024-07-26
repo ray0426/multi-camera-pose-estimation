@@ -1,4 +1,4 @@
-import threading
+import multiprocessing
 
 class SingletonLock:
     _locks = {}
@@ -6,7 +6,7 @@ class SingletonLock:
     @classmethod
     def get_lock(cls, name):
         if name not in cls._locks:
-            cls._locks[name] = threading.Lock()
+            cls._locks[name] = multiprocessing.Lock()
         return cls._locks[name]
 
 print_lock = SingletonLock.get_lock('print')

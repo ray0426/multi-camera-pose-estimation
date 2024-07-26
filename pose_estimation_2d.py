@@ -1,9 +1,7 @@
 import os
 import cv2
 import sys
-import threading
 from multiprocessing import Process, Queue
-import queue
 import time
 import numpy as np
 from singleton_lock import print_lock, tprint
@@ -48,23 +46,18 @@ def load_openpose_module():
     return True
 
 class PoseEstimator(Process):
-# class PoseEstimator(threading.Thread):
     def __init__(self, cam_id, config, frame_queue, shared_dict):
         super().__init__()
-        # threading.Thread.__init__(self)
         self.cam_id = cam_id
         self.process_name = f"PoseEstimator {self.cam_id}"
         self.config = config
         self.frame_queue = frame_queue
         self.queue = Queue(maxsize = 5)
-        # self.queue = queue.Queue(maxsize = 5)
         self.shared_dict = shared_dict
         self.shared_dict[self.process_name] = {
             'fps': 0,
             'running': True
         }
-        # self.fps = 0
-        # self.running = True
 
     def run(self):
         if not OPENPOSE_VALID:
