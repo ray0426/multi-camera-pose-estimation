@@ -1,7 +1,8 @@
 import time
 import tkinter as tk
 from multiprocessing import Manager
-from read_camera import CameraReader, CameraDisplayer
+from camera_reader import CameraReader
+from camera_displayer import CameraDisplayer
 from pose_estimation_2d import PoseEstimator
 
 from singleton_lock import tprint
