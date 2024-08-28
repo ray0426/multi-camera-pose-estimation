@@ -46,17 +46,18 @@ def load_openpose_module():
     return True
 
 class PoseEstimator(Process):
-    def __init__(self, cam_id, config, frame_queue, shared_dict):
+    def __init__(self, cam_id, config, original_image, input_camera_name, shared_dict):
         super().__init__()
         self.cam_id = cam_id
         self.process_name = f"PoseEstimator {self.cam_id}"
         self.config = config
-        self.frame_queue = frame_queue
-        self.queue = Queue(maxsize = 5)
+        self.input_camera_name = input_camera_name
+        self.original_image = original_image
         self.shared_dict = shared_dict
         self.shared_dict[self.process_name] = {
             'fps': 0,
-            'running': True
+            'running': True,
+            'poseKeypoints': None
         }
 
     def run(self):
@@ -76,8 +77,6 @@ class PoseEstimator(Process):
         finally:
             # queue cancel_join_thread() to prevent block join_thread()
             # https://docs.python.org/3/library/multiprocessing.html#pipes-and-queues
-            self.queue.close()
-            self.queue.cancel_join_thread()
             tprint(f"Stopping HPE {self.cam_id}")
     
     def pose_estimation(self):
@@ -104,29 +103,33 @@ class PoseEstimator(Process):
         prev_time = time.time()
         times = [1]
         maxCount = 60
-        while self.shared_dict[self.process_name]['running'] and self.frame_queue:
-            if not self.frame_queue.empty():
+        prev_image_idx = -1
+        while not self.shared_dict["control signals"][self.process_name]["halt"]:
+            input_frame = np.frombuffer(self.original_image.get_obj(), dtype=np.uint8).reshape((frameHeight, frameWidth, 3))
+            if (input_frame is not None) and not (prev_image_idx == self.shared_dict[self.input_camera_name]['image_idx']):
+                prev_image_idx = self.shared_dict[self.input_camera_name]['image_idx']
                 current_time = time.time()
                 times.append(round(current_time - prev_time, 2))
                 times = times[-maxCount:]
-                status = self.shared_dict[self.process_name]
-                status['fps'] = 1 / np.mean(times) #計算時間
-                self.shared_dict[self.process_name] = status
+                local_dict = self.shared_dict[self.process_name]
+                local_dict['fps'] = 1 / np.mean(times) #計算時間
                 prev_time = current_time
 
-                frame = self.frame_queue.get()
-                datum.cvInputData = frame    
+                datum.cvInputData = input_frame    
                 #opWrapper.emplaceAndPop([datum]) #原本的但有問題
                 opWrapper.emplaceAndPop(global_op.VectorDatum([datum])) #改成這個程式碼
-                OutputData = datum.cvOutputData #加上骨架後影像
+                # OutputData = datum.cvOutputData #加上骨架後影像
+                poseKeypoints = datum.poseKeypoints
+                faceKeypoints = datum.faceKeypoints
+                handKeypoints = datum.handKeypoints
                 # 縮放 OutputData 成指定大小
-                resized_output = cv2.resize(OutputData, (frameWidth, frameHeight))
-                if self.queue.full():
-                    self.queue.get()
-                self.queue.put(resized_output)
+                # resized_output = cv2.resize(OutputData, (frameWidth, frameHeight))
+                local_dict['poseKeypoints'] = poseKeypoints
+                self.shared_dict[self.process_name] = local_dict
             else:
                 # tprint(f"queue {self.cam_id} empty!")
-                time.sleep(0.01)
+                # time.sleep(0.01)
+                pass
             # tprint(f"                      queue size: {self.queue.qsize()}")
         print("finish hpe")
 

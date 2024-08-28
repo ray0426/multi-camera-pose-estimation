@@ -1,9 +1,10 @@
 import time
 import tkinter as tk
-from multiprocessing import Manager
+from multiprocessing import Manager, Array
 from camera_reader import CameraReader
 from camera_displayer import CameraDisplayer
 from pose_estimation_2d import PoseEstimator
+import ctypes
 
 from singleton_lock import tprint
 
@@ -26,6 +27,8 @@ class CameraControlPanel(tk.Frame):
 
         self.process_manager = Manager()
         self.shared_dict = self.process_manager.dict()
+        self.shared_dict["control signals"] = {}
+        self.original_image = {}
 
         self.create_widgets()
         self.update_fps()
@@ -126,32 +129,44 @@ class CameraControlPanel(tk.Frame):
     def start_process(self, process_class, cam_id, proc_type):
         if cam_id not in self.processes[proc_type].keys():
             if proc_type == "CameraReader":
+                self.original_image[cam_id] = Array(ctypes.c_uint8, 720 * 1280 * 3) # magic number should be changed
                 process = process_class(
-                    cam_id, self.config, self.shared_dict
+                    cam_id, self.config, 
+                    self.original_image[cam_id], 
+                    self.shared_dict
                 )
             elif proc_type == "CameraDisplayer":
                 process = process_class(
                     cam_id, self.config, 
-                    self.processes["PoseEstimator"][cam_id].queue,
+                    self.original_image[cam_id],
+                    f"CameraReader {cam_id}",
+                    f"PoseEstimator {cam_id}",
                     self.shared_dict
                 )
             elif proc_type == "PoseEstimator":
                 process = process_class(
                     cam_id, self.config, 
-                    self.processes["CameraReader"][cam_id].queue,
+                    self.original_image[cam_id],
+                    f"CameraReader {cam_id}",
                     self.shared_dict
                 )
+            local_control_dict = self.shared_dict["control signals"]
+            local_control_dict[f"{proc_type} {cam_id}"] = {}
+            local_control_dict[f"{proc_type} {cam_id}"]["halt"] = False
+            self.shared_dict["control signals"] = local_control_dict
             process.start()
             self.processes[proc_type][cam_id] = process
             tprint(f"{proc_type} {cam_id} started!")
 
     def stop_process(self, cam_id, proc_type):
         if cam_id in self.processes[proc_type].keys():
-            status = self.shared_dict[f"{proc_type} {cam_id}"]
-            status['running'] = False
-            self.shared_dict[f"{proc_type} {cam_id}"] = status
+            local_control_dict = self.shared_dict["control signals"]
+            local_control_dict[f"{proc_type} {cam_id}"]["halt"] = True
+            self.shared_dict["control signals"] = local_control_dict
             self.processes[proc_type][cam_id].join()
             del self.processes[proc_type][cam_id]
+            if proc_type == "CameraReader":
+                del self.original_image[cam_id]
             tprint(f"{proc_type} {cam_id} stopped!")
         
     def start_camera(self, cam_id):
