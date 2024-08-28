@@ -29,6 +29,7 @@ class CameraControlPanel(tk.Frame):
         self.shared_dict = self.process_manager.dict()
         self.shared_dict["control signals"] = {}
         self.original_image = {}
+        self.pose_2d = {}
 
         self.create_widgets()
         self.update_fps()
@@ -130,6 +131,7 @@ class CameraControlPanel(tk.Frame):
         if cam_id not in self.processes[proc_type].keys():
             if proc_type == "CameraReader":
                 self.original_image[cam_id] = Array(ctypes.c_uint8, 720 * 1280 * 3) # magic number should be changed
+                self.pose_2d[cam_id] = Array(ctypes.c_float, 25 * 3) # magic number should be changed
                 process = process_class(
                     cam_id, self.config, 
                     self.original_image[cam_id], 
@@ -139,6 +141,7 @@ class CameraControlPanel(tk.Frame):
                 process = process_class(
                     cam_id, self.config, 
                     self.original_image[cam_id],
+                    self.pose_2d[cam_id],
                     f"CameraReader {cam_id}",
                     f"PoseEstimator {cam_id}",
                     self.shared_dict
@@ -147,6 +150,7 @@ class CameraControlPanel(tk.Frame):
                 process = process_class(
                     cam_id, self.config, 
                     self.original_image[cam_id],
+                    self.pose_2d[cam_id],
                     f"CameraReader {cam_id}",
                     self.shared_dict
                 )
