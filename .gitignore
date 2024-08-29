@@ -166,3 +166,6 @@ cython_debug/
 
 # Local testing files
 testing/
+
+# output files
+outputs/

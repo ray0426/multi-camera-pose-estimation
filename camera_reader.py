@@ -16,7 +16,7 @@ class CameraReader(Process):
         self.shared_dict[self.process_name] = {
             'fps': 0,
             'running': True,
-            'image_idx': 0
+            'image_id': 0
         }
 
     def run(self):
@@ -53,21 +53,21 @@ class CameraReader(Process):
         prev_time = time.time()
         times = [1]
         maxCount = 60
-        image_idx = 0
+        image_id = 0
         while rval and not self.shared_dict["control signals"][self.process_name]["halt"]:
             current_time = time.time()
             times.append(round(current_time - prev_time, 2))
             times = times[-maxCount:]
             local_dict = self.shared_dict[self.process_name]
             local_dict['fps'] = 1 / np.mean(times) #計算時間
-            local_dict['image_idx'] = image_idx
+            local_dict['image_id'] = image_id
             prev_time = current_time
             self.shared_dict[self.process_name] = local_dict
 
             rval, frame = cam.read()
             original_image = np.frombuffer(self.original_image.get_obj(), dtype=np.uint8).reshape((frameHeight, frameWidth, 3))
             original_image[:] = frame
-            image_idx = image_idx + 1
+            image_id = image_id + 1
         local_dict = self.shared_dict[self.process_name]
         local_dict['running'] = False
         self.shared_dict[self.process_name] = local_dict

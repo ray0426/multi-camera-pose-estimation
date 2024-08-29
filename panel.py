@@ -4,9 +4,12 @@ from multiprocessing import Manager, Array
 from camera_reader import CameraReader
 from camera_displayer import CameraDisplayer
 from pose_estimation_2d import PoseEstimator
+from recorder import Recorder
 import ctypes
 
 from singleton_lock import tprint
+
+PROCTYPES = ["CameraReader", "CameraDisplayer", "PoseEstimator"]
 
 class CameraControlPanel(tk.Frame):
     def __init__(self, master=None, config=None, camera_ids=[0, 1]):
@@ -18,7 +21,8 @@ class CameraControlPanel(tk.Frame):
         self.processes = {
             "CameraReader": {},
             "CameraDisplayer": {},
-            "PoseEstimator": {}
+            "PoseEstimator": {},
+            "Recorder": {}
         }
 
         self.read_fps_labels = {}
@@ -126,6 +130,23 @@ class CameraControlPanel(tk.Frame):
                 command = lambda cid = cam_id: self.stop_hpe(cid)
             )
             stop_hpe_button.pack(side = "left")
+        
+        control_panel_frame = tk.Frame(self)
+        control_panel_frame.pack(pady=10)
+        button_frame = tk.Frame(control_panel_frame)
+        button_frame.pack()
+        start_record_button = tk.Button(
+            button_frame, 
+            text = "Start Record", 
+            command = self.start_record
+        )
+        start_record_button.pack(side = "left")
+        stop_record_button = tk.Button(
+            button_frame, 
+            text = "Stop Record", 
+            command = self.stop_record
+        )
+        stop_record_button.pack(side = "left")
 
     def start_process(self, process_class, cam_id, proc_type):
         if cam_id not in self.processes[proc_type].keys():
@@ -211,5 +232,36 @@ class CameraControlPanel(tk.Frame):
                     self.stop_display(cam_id)
                 elif proc_type == 'PoseEstimator':
                     self.stop_hpe(cam_id)
+                elif proc_type == 'Recorder':
+                    self.stop_record()
         time.sleep(1)
         self.master.destroy()
+
+    def start_record(self):
+        # check the environment is ready
+        for cam_id in self.camera_ids:
+            for proc_type in ["CameraReader"]:
+                if cam_id not in self.processes[proc_type].keys():
+                    tprint(f"{proc_type} {cam_id} is not ready")
+                    return
+        process = Recorder(
+            self.config, 
+            self.original_image,
+            self.shared_dict
+        )
+        local_control_dict = self.shared_dict["control signals"]
+        local_control_dict["Recorder"] = {}
+        local_control_dict["Recorder"]["halt"] = False
+        self.shared_dict["control signals"] = local_control_dict
+        process.start()
+        self.processes["Recorder"][0] = process
+        tprint(f"Recorder started!")
+
+    def stop_record(self):
+        if 0 in self.processes["Recorder"].keys():
+            local_control_dict = self.shared_dict["control signals"]
+            local_control_dict["Recorder"]["halt"] = True
+            self.shared_dict["control signals"] = local_control_dict
+            self.processes["Recorder"][0].join()
+            del self.processes["Recorder"][0]
+            tprint(f"Recorder stopped!")

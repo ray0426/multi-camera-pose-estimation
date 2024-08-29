@@ -104,11 +104,11 @@ class PoseEstimator(Process):
         prev_time = time.time()
         times = [1]
         maxCount = 60
-        prev_image_idx = -1
+        prev_image_id = -1
         while not self.shared_dict["control signals"][self.process_name]["halt"]:
             input_frame = np.frombuffer(self.original_image.get_obj(), dtype=np.uint8).reshape((frameHeight, frameWidth, 3))
-            if (input_frame is not None) and not (prev_image_idx == self.shared_dict[self.input_camera_name]['image_idx']):
-                prev_image_idx = self.shared_dict[self.input_camera_name]['image_idx']
+            if (input_frame is not None) and not (prev_image_id == self.shared_dict[self.input_camera_name]['image_id']):
+                prev_image_id = self.shared_dict[self.input_camera_name]['image_id']
                 current_time = time.time()
                 times.append(round(current_time - prev_time, 2))
                 times = times[-maxCount:]
