@@ -52,7 +52,7 @@ class CameraDisplayer(Process):
                 self.shared_dict[self.process_name] = status
                 prev_time = current_time
 
-                frame = input_frame
+                frame = np.copy(input_frame)
                 pose_2d = np.frombuffer(self.pose_2d.get_obj(), dtype=np.float32).reshape((25, 3))
                 frame = self.draw_human_2d(frame, pose_2d)
                 cv2.putText(

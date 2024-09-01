@@ -51,3 +51,28 @@ class Recorder(Process):
                     frame = np.frombuffer(frame_array.get_obj(), dtype=np.uint8).reshape((frameHeight, frameWidth, 3))
                     self.video_writers[cam_id].write(frame)
                     # print(f"write frame {prev_image_ids[cam_id]} of camera {cam_id}")
+
+photo_id = 0
+
+def photo(self):
+    global photo_id
+    frameWidth, frameHeight, fps = decode_frame_size_rate(self.config['resolution_fps_setting'])
+    output_dir = "outputs/calibration"
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    
+    for cam_id in self.camera_ids:
+        # image_id = self.shared_dict[f"CameraReader {cam_id}"]['image_id']
+        output_fn = os.path.join(output_dir, f"{cam_id}", f"frame_{photo_id:05d}.jpg")
+        frame = np.frombuffer(self.original_image[cam_id].get_obj(), dtype=np.uint8).reshape((frameHeight, frameWidth, 3))
+        save_image(frame, output_fn)
+    
+    print(f"Saved")
+    photo_id = photo_id + 1
+
+def save_image(frame, output_fn):
+    # Save the image
+    cv2.imwrite(output_fn, frame)
+    
+    # Optionally, print the save information
+    print(f"Saved {output_fn}")

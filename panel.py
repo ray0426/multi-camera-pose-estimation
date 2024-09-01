@@ -1,10 +1,12 @@
+import os
 import time
+import numpy as np
 import tkinter as tk
 from multiprocessing import Manager, Array
 from camera_reader import CameraReader
 from camera_displayer import CameraDisplayer
 from pose_estimation_2d import PoseEstimator
-from recorder import Recorder
+from recorder import Recorder, photo
 import ctypes
 
 from singleton_lock import tprint
@@ -147,6 +149,12 @@ class CameraControlPanel(tk.Frame):
             command = self.stop_record
         )
         stop_record_button.pack(side = "left")
+        photo_button = tk.Button(
+            button_frame, 
+            text = "Photo", 
+            command = self.take_photo
+        )
+        photo_button.pack(side = "left")
 
     def start_process(self, process_class, cam_id, proc_type):
         if cam_id not in self.processes[proc_type].keys():
@@ -265,3 +273,12 @@ class CameraControlPanel(tk.Frame):
             self.processes["Recorder"][0].join()
             del self.processes["Recorder"][0]
             tprint(f"Recorder stopped!")
+
+    # TODO: this might not be in panel process
+    def take_photo(self):
+        try:
+            while True:
+                photo(self)
+                time.sleep(5)
+        except Exception as e:
+            print(f"Exception in take_photo : {e}")
