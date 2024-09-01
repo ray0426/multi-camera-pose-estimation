@@ -3,7 +3,7 @@ import numpy as np
 import time
 from multiprocessing import Process, Queue
 from singleton_lock import print_lock, tprint
-from utils import decode_frame_size_rate
+from utils import decode_frame_size_rate, BODY25_SKELETON_EDGES
 
 class CameraDisplayer(Process):
     def __init__(self, cam_id, config, original_image, pose_2d, input_camera_name, input_hpe_name, shared_dict):
@@ -82,16 +82,6 @@ class CameraDisplayer(Process):
          y
         cv2.line(frame, (x1, y1), (x2, y2), (255, 255, 0), 7)   # BGR
         '''
-        BODY25_SKELETON_EDGES = np.array([
-            [0, 1],
-            [1, 2], [2, 3], [3, 4],
-            [1, 5], [5, 6], [6, 7],
-            [1, 8],
-            [8, 9], [9, 10], [10, 11], [11, 22], [11, 24], [22, 23],
-            [8, 12], [12, 13], [13, 14], [14, 19], [14, 21], [19, 20],
-            [0, 15], [15, 17],
-            [0, 16], [16, 18]
-        ])
         for i in range(len(BODY25_SKELETON_EDGES)):
             start_idx = BODY25_SKELETON_EDGES[i, 0]
             end_idx = BODY25_SKELETON_EDGES[i, 1]

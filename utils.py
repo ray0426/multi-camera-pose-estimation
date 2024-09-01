@@ -1,4 +1,5 @@
 import cv2
+import numpy as np
 
 def decode_frame_size_rate(setting_str):
     if setting_str == "640x480@30":
@@ -33,3 +34,14 @@ def print_cam_informations(cam_id, cam, type="simple"):
         print("focus :", cam.get(cv2.CAP_PROP_FOCUS))
         print("mode :", cam.get(cv2.CAP_PROP_MODE))
         print("zoom :", cam.get(cv2.CAP_PROP_ZOOM))
+
+BODY25_SKELETON_EDGES = np.array([
+    [0, 1],
+    [1, 2], [2, 3], [3, 4],
+    [1, 5], [5, 6], [6, 7],
+    [1, 8],
+    [8, 9], [9, 10], [10, 11], [11, 22], [11, 24], [22, 23],
+    [8, 12], [12, 13], [13, 14], [14, 19], [14, 21], [19, 20],
+    [0, 15], [15, 17],
+    [0, 16], [16, 18]
+])

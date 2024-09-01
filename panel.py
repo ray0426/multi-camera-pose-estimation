@@ -6,6 +6,7 @@ from multiprocessing import Manager, Array
 from camera_reader import CameraReader
 from camera_displayer import CameraDisplayer
 from pose_estimation_2d import PoseEstimator
+from pose_estimation_3d import PoseEstimator3D
 from recorder import Recorder, photo
 import ctypes
 
@@ -24,7 +25,8 @@ class CameraControlPanel(tk.Frame):
             "CameraReader": {},
             "CameraDisplayer": {},
             "PoseEstimator": {},
-            "Recorder": {}
+            "Recorder": {},
+            "PoseEstimator3D": {}
         }
 
         self.read_fps_labels = {}
@@ -133,9 +135,10 @@ class CameraControlPanel(tk.Frame):
             )
             stop_hpe_button.pack(side = "left")
         
-        control_panel_frame = tk.Frame(self)
-        control_panel_frame.pack(pady=10)
-        button_frame = tk.Frame(control_panel_frame)
+        # record
+        record_panel_frame = tk.Frame(self)
+        record_panel_frame.pack(pady=10)
+        button_frame = tk.Frame(record_panel_frame)
         button_frame.pack()
         start_record_button = tk.Button(
             button_frame, 
@@ -155,6 +158,24 @@ class CameraControlPanel(tk.Frame):
             command = self.take_photo
         )
         photo_button.pack(side = "left")
+
+        # 3D HPE
+        hpe_3D_panel_frame = tk.Frame(self)
+        hpe_3D_panel_frame.pack(pady=10)
+        button_frame = tk.Frame(hpe_3D_panel_frame)
+        button_frame.pack()
+        start_hpe_3D_button = tk.Button(
+            button_frame, 
+            text = "Start 3D HPE", 
+            command = self.start_hpe_3D
+        )
+        start_hpe_3D_button.pack(side = "left")
+        stop_hpe_3D_button = tk.Button(
+            button_frame, 
+            text = "Stop 3D HPE", 
+            command = self.stop_hpe_3D
+        )
+        stop_hpe_3D_button.pack(side = "left")
 
     def start_process(self, process_class, cam_id, proc_type):
         if cam_id not in self.processes[proc_type].keys():
@@ -181,6 +202,13 @@ class CameraControlPanel(tk.Frame):
                     self.original_image[cam_id],
                     self.pose_2d[cam_id],
                     f"CameraReader {cam_id}",
+                    self.shared_dict
+                )
+            elif proc_type == "PoseEstimator3D":
+                process = process_class(
+                    cam_id, self.config,
+                    self.pose_2d,
+                    self.camera_ids,
                     self.shared_dict
                 )
             local_control_dict = self.shared_dict["control signals"]
@@ -219,6 +247,12 @@ class CameraControlPanel(tk.Frame):
 
     def stop_hpe(self, cam_id):
         self.stop_process(cam_id, 'PoseEstimator')
+    
+    def start_hpe_3D(self):
+        self.start_process(PoseEstimator3D, 0, 'PoseEstimator3D')
+
+    def stop_hpe_3D(self):
+        self.stop_process(0, 'PoseEstimator3D')
 
     def update_fps(self):
         for cam_id in self.camera_ids:
